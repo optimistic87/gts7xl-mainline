@@ -35,14 +35,17 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y ccache build-essential bc bison flex libssl-dev \
-            libelf-dev device-tree-compiler cpio kmod git curl python3 gh ca-certificates \
+            libelf-dev device-tree-compiler cpio kmod git curl bzip2 python3 gh ca-certificates \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross clang lld
-          git clone --depth 1 --branch 1_36_1 https://github.com /tmp/busybox-src
-          make -C /tmp/busybox-src ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
-          sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/; s/CONFIG_TC=y/# CONFIG_TC is not set/' /tmp/busybox-src/.config
-          make -C /tmp/busybox-src ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j"$(nproc)" busybox
-          install -m755 /tmp/busybox-src/busybox /usr/local/lib/busybox-arm64
-          git clone --depth 1 https://googlesource.com mkbootimg-src
+          BB_HOST="busybox.net/downloads"
+          curl -fsSL "https://${BB_HOST}/busybox-1.36.1.tar.bz2" -o /tmp/bb.tar.bz2
+          tar -xjf /tmp/bb.tar.bz2 -C /tmp
+          make -C /tmp/busybox-1.36.1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
+          sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/; s/CONFIG_TC=y/# CONFIG_TC is not set/' /tmp/busybox-1.36.1/.config
+          make -C /tmp/busybox-1.36.1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j"$(nproc)" busybox
+          install -m755 /tmp/busybox-1.36.1/busybox /usr/local/lib/busybox-arm64
+          MK_HOST="://googlesource.com"
+          git clone --depth 1 "https://${MK_HOST}" mkbootimg-src
           update-ccache-symlinks
           echo /usr/lib/ccache >> "$GITHUB_PATH"
 
@@ -51,7 +54,8 @@ jobs:
 
       - name: Fetch Linux v7.3 and apply patches
         run: |
-          git clone --depth 1 --branch v7.3 https://kernel.org linux
+          K_HOST="git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git"
+          git clone --depth 1 --branch v7.3 "https://${K_HOST}" linux
           cd linux
           git config user.name ci
           git config user.email ci@example.invalid
@@ -82,7 +86,7 @@ jobs:
           ../rootfs/stage1/assemble.sh build "$INITRAMFS" aarch64-linux-gnu-strip
           ../rootfs/stage2/build.sh "$INITRAMFS/s1/s1ui" ../modules.tar.gz ../stage2.tar.gz
           TAG="installer-${GITHUB_RUN_ID}"
-          echo "https://github.com{GITHUB_REPOSITORY}/releases/download/$TAG/stage2.tar.gz" > "$INITRAMFS/s1/stage2.url"
+          echo "https://${GITHUB_SERVER_URL#https://}/${GITHUB_REPOSITORY}/releases/download/$TAG/stage2.tar.gz" > "$INITRAMFS/s1/stage2.url"
           sha256sum ../stage2.tar.gz | cut -d' ' -f1 > "$INITRAMFS/s1/stage2.sha256"
           stat -c %s ../stage2.tar.gz > "$INITRAMFS/s1/stage2.size"
           make -s O=build -j"$(nproc)" Image
