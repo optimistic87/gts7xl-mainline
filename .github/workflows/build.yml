@@ -118,7 +118,7 @@ jobs:
           cp modules.tar.gz artifact/modules-7.3.0-gts7xl.tar.gz
           (cd artifact && sha256sum boot.img modules-7.3.0-gts7xl.tar.gz > SHA256SUMS)
 
-      - name: Publish the RAM installer
+     # - name: Publish the RAM installer
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -131,7 +131,7 @@ jobs:
             "https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/stage2.tar.gz" "$GITHUB_RUN_ID" > installer.json
           gh release upload Installer installer.json --clobber
 
-      - name: Publish the module repo
+     # - name: Publish the module repo
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
