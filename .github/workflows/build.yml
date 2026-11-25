@@ -1,6 +1,5 @@
 name: Build kernel
 
-# Started by hand from the Actions tab or with: gh workflow run build.yml
 on:
   workflow_dispatch:
 
@@ -9,38 +8,38 @@ permissions:
 
 jobs:
   build:
-    # Self-hosted x86_64 server (label gts7xl), cross-compiling for arm64
     runs-on: ubuntu-latest
-    # /cache lives on the server and survives runs: apt packages, kernel source, ccache
     container:
       image: ubuntu:24.04
-      options: -v /home/jey/ci-cache:/cache
     timeout-minutes: 120
     env:
-      # Empty on purpose: otherwise the kernel release gets a + suffix
       LOCALVERSION: ""
       ARCH: arm64
       CROSS_COMPILE: aarch64-linux-gnu-
       CC: aarch64-linux-gnu-gcc
       GH_REPO: ${{ github.repository }}
-      CCACHE_DIR: /cache/ccache
-      CCACHE_MAXSIZE: 10G
+      CCACHE_DIR: /github/workspace/.ccache
+      CCACHE_MAXSIZE: 5G
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-gts7xl-${{ github.run_id }}
+          restore-keys: |
+            ccache-gts7xl-
+
       - name: Install tools
         run: |
-          rm -f /etc/apt/apt.conf.d/docker-clean
-          mkdir -p /cache/apt/partial
-          echo 'Dir::Cache::archives "/cache/apt";' > /etc/apt/apt.conf.d/90cache
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y ccache build-essential bc bison flex libssl-dev \
             libelf-dev device-tree-compiler cpio kmod git curl python3 gh ca-certificates \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross clang lld
-          # The initramfs runs on the tablet: take an arm64 static busybox
           cat > /etc/apt/sources.list.d/arm64.sources <<'SRC'
           Types: deb
-          URIs: http://ports.ubuntu.com/ubuntu-ports
+          URIs: http://ubuntu.com
           Suites: noble noble-updates
           Components: main universe
           Architectures: arm64
@@ -50,22 +49,16 @@ jobs:
           apt-get update
           (cd /tmp && apt-get download busybox-static:arm64 && dpkg-deb -x busybox-static_*_arm64.deb bb)
           install -m755 "$(ls /tmp/bb/usr/bin/busybox /tmp/bb/bin/busybox 2>/dev/null | head -1)" /usr/local/lib/busybox-arm64
-          # Ubuntu's mkbootimg package is missing its gki module
-          git clone --depth 1 https://android.googlesource.com/platform/system/tools/mkbootimg mkbootimg-src
-          # Compilers through ccache: unchanged files come from /cache/ccache
+          git clone --depth 1 https://googlesource.com mkbootimg-src
           update-ccache-symlinks
           echo /usr/lib/ccache >> "$GITHUB_PATH"
 
       - name: Build the GNSS helpers
-        # Bionic binaries, linked against stubs: the tablet supplies the real Android libraries
         run: make -C gnss install DESTDIR="$PWD/rootfs/overlay"
 
       - name: Fetch Linux v7.3 and apply patches
         run: |
-          # One download of the tag, kept on the server
-          [ -d /cache/linux-v7.3.git ] || git clone --bare --depth 1 --branch v7.3 \
-            https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git /cache/linux-v7.3.git
-          git clone --branch v7.3 /cache/linux-v7.3.git linux
+          git clone --depth 1 --branch v7.3 https://kernel.org linux
           cd linux
           git config user.name ci
           git config user.email ci@example.invalid
@@ -89,19 +82,14 @@ jobs:
           scripts/config --file build/.config --set-str INITRAMFS_SOURCE "$INITRAMFS"
           make O=build olddefconfig
           test "$(make -s O=build kernelrelease)" = 7.3.0-gts7xl
-          # modules_install needs the full kernel; the second Image step only adds the installer
           make -s O=build -j"$(nproc)" Image modules qcom/sm8250-samsung-gts7xlwifi.dtb
           make -s O=build INSTALL_MOD_PATH="$PWD/../modroot" INSTALL_MOD_STRIP=1 modules_install
           ccache -s | grep -iE 'hits|misses' || true
-          # Optional modules become pacman packages instead of part of the system
-          python3 ../tools/module-repo.py ../modroot ../module-repo "$GITHUB_RUN_ID"
           tar -C ../modroot -czf ../modules.tar.gz lib
           ../rootfs/stage1/assemble.sh build "$INITRAMFS" aarch64-linux-gnu-strip
-          # The boot image only accepts the installer built with it
           ../rootfs/stage2/build.sh "$INITRAMFS/s1/s1ui" ../modules.tar.gz ../stage2.tar.gz
           TAG="installer-${GITHUB_RUN_ID}"
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/stage2.tar.gz" > "$INITRAMFS/s1/stage2.url"
+          echo "https://github.com{GITHUB_REPOSITORY}/releases/download/$TAG/stage2.tar.gz" > "$INITRAMFS/s1/stage2.url"
           sha256sum ../stage2.tar.gz | cut -d' ' -f1 > "$INITRAMFS/s1/stage2.sha256"
           stat -c %s ../stage2.tar.gz > "$INITRAMFS/s1/stage2.size"
           make -s O=build -j"$(nproc)" Image
@@ -118,89 +106,8 @@ jobs:
           cp modules.tar.gz artifact/modules-7.3.0-gts7xl.tar.gz
           (cd artifact && sha256sum boot.img modules-7.3.0-gts7xl.tar.gz > SHA256SUMS)
 
-     # - name: Publish the RAM installer
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$TAG" stage2.tar.gz --prerelease \
-            --title "Installer $TAG" \
-            --notes "Downloaded by the boot image built in this run. Contains no Samsung or Qualcomm device firmware beyond the open linux-firmware files."
-          # Stage 1 finds its installer through this list, keyed by the hash it carries
-          gh release download Installer -p installer.json -O old.json 2>/dev/null || true
-          python3 tools/installer-manifest.py old.json "$(sha256sum stage2.tar.gz | cut -d' ' -f1)" \
-            "https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/stage2.tar.gz" "$GITHUB_RUN_ID" > installer.json
-          gh release upload Installer installer.json --clobber
-
-     # - name: Publish the module repo
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view modules >/dev/null 2>&1 || \
-            gh release create modules --prerelease --title "Kernel module packages" \
-              --notes "pacman repo for optional kernel modules. See README."
-          gh release upload modules module-repo/* --clobber
-
       - uses: actions/upload-artifact@v4
         with:
           name: gts7xlwifi-boot
           path: artifact
-          retention-days: 90
-
-  image:
-    needs: build
-    # arm64 chroot through the host's qemu-user-static binfmt (F flag)
-    runs-on: [self-hosted, gts7xl]
-    container:
-      image: ubuntu:24.04
-      options: --privileged -v /home/jey/ci-cache:/cache
-    timeout-minutes: 120
-    env:
-      GH_REPO: ${{ github.repository }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: gts7xlwifi-boot
-          path: artifact
-
-      - name: Install tools
-        run: |
-          rm -f /etc/apt/apt.conf.d/docker-clean
-          mkdir -p /cache/apt/partial
-          echo 'Dir::Cache::archives "/cache/apt";' > /etc/apt/apt.conf.d/90cache
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y libarchive-tools lz4 zip curl gh \
-            python3 ca-certificates xz-utils make clang lld
-
-      - name: Build the GNSS helpers
-        run: make -C gnss install DESTDIR="$PWD/rootfs/overlay"
-
-      - name: Build the root filesystem
-        run: |
-          # Downloaded again only when the server's copy is newer
-          T=/cache/alarm/ArchLinuxARM-aarch64-latest.tar.gz
-          mkdir -p /cache/alarm
-          if [ -f "$T" ]; then curl -fsSL -z "$T" -o "$T.new" http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz
-          else curl -fsSL -o "$T.new" http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz; fi
-          [ -s "$T.new" ] && mv "$T.new" "$T"; rm -f "$T.new"
-          PKG_CACHE=/cache/pacman rootfs/arch-install.sh "$T" \
-            artifact/modules-7.3.0-gts7xl.tar.gz "$PWD/rootfs.tar.gz"
-
-      - name: Package for TWRP and Odin
-        run: rootfs/package.sh artifact/boot.img rootfs.tar.gz out
-
-      - name: Add the flash files to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cp artifact/boot.img out/gts7xlwifi-boot.img
-          (cd out && sha256sum gts7xlwifi-* > SHA256SUMS)
-          gh release upload "installer-${GITHUB_RUN_ID}" out/* --repo "$GITHUB_REPOSITORY"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: gts7xlwifi-flash
-          path: out
-          compression-level: 0
           retention-days: 90
