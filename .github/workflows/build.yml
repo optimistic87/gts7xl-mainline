@@ -31,7 +31,7 @@ jobs:
           restore-keys: |
             ccache-gts7xl-
 
-            - name: Install tools
+      - name: Install tools
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y ccache build-essential bc bison flex libssl-dev \
@@ -44,7 +44,6 @@ jobs:
           git clone --depth 1 https://googlesource.com mkbootimg-src
           update-ccache-symlinks
           echo /usr/lib/ccache >> "$GITHUB_PATH"
-
 
       - name: Build the GNSS helpers
         run: make -C gnss install DESTDIR="$PWD/rootfs/overlay"
