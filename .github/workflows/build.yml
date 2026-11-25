@@ -31,27 +31,20 @@ jobs:
           restore-keys: |
             ccache-gts7xl-
 
-      - name: Install tools
+            - name: Install tools
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y ccache build-essential bc bison flex libssl-dev \
             libelf-dev device-tree-compiler cpio kmod git curl python3 gh ca-certificates \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross clang lld
-          sed -i 's|^URIs: http://ubuntu.com|Architectures: amd64\nURIs: http://ubuntu.com|' /etc/apt/sources.list.d/ubuntu.sources
-          cat > /etc/apt/sources.list.d/arm64.sources <<'SRC'
-          Types: deb
-          URIs: http://ubuntu.com
-          Suites: noble noble-updates
-          Components: main universe
-          Architectures: arm64
-          SRC
-          dpkg --add-architecture arm64
-          apt-get update
-          (cd /tmp && apt-get download busybox-static:arm64 && dpkg-deb -x busybox-static_*_arm64.deb bb)
+          BB_DEB=$(curl -s http://ubuntu.com | grep -oE 'busybox-static_[^"]+_arm64\.deb' | tail -1)
+          curl -fL "http://ubuntu.com${BB_DEB}" -o /tmp/busybox.deb
+          dpkg-deb -x /tmp/busybox.deb /tmp/bb
           install -m755 "$(ls /tmp/bb/usr/bin/busybox /tmp/bb/bin/busybox 2>/dev/null | head -1)" /usr/local/lib/busybox-arm64
           git clone --depth 1 https://googlesource.com mkbootimg-src
           update-ccache-symlinks
           echo /usr/lib/ccache >> "$GITHUB_PATH"
+
 
       - name: Build the GNSS helpers
         run: make -C gnss install DESTDIR="$PWD/rootfs/overlay"
