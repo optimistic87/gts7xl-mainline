@@ -37,9 +37,11 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y ccache build-essential bc bison flex libssl-dev \
             libelf-dev device-tree-compiler cpio kmod git curl python3 gh ca-certificates \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross clang lld
-          BB_APK=$(curl -fsSL https://alpinelinux.org | grep -oE 'busybox-static-[0-9][^"]+\.apk' | head -1)
-          curl -fsSL "https://alpinelinux.org${BB_APK}" | tar -xz -C /tmp
-          install -m755 /tmp/bin/busybox.static /usr/local/lib/busybox-arm64
+          git clone --depth 1 --branch 1_36_1 https://busybox.net /tmp/busybox-src
+          make -C /tmp/busybox-src ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
+          sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/; s/CONFIG_TC=y/# CONFIG_TC is not set/' /tmp/busybox-src/.config
+          make -C /tmp/busybox-src ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j"$(nproc)" busybox
+          install -m755 /tmp/busybox-src/busybox /usr/local/lib/busybox-arm64
           git clone --depth 1 https://googlesource.com mkbootimg-src
           update-ccache-symlinks
           echo /usr/lib/ccache >> "$GITHUB_PATH"
