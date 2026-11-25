@@ -37,6 +37,7 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y ccache build-essential bc bison flex libssl-dev \
             libelf-dev device-tree-compiler cpio kmod git curl python3 gh ca-certificates \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross clang lld
+          sed -i 's|^URIs: http://ubuntu.com|Architectures: amd64\nURIs: http://ubuntu.com|' /etc/apt/sources.list.d/ubuntu.sources
           cat > /etc/apt/sources.list.d/arm64.sources <<'SRC'
           Types: deb
           URIs: http://ubuntu.com
@@ -44,7 +45,6 @@ jobs:
           Components: main universe
           Architectures: arm64
           SRC
-          sed -i 's/^Types: deb$/Types: deb\nArchitectures: amd64/' /etc/apt/sources.list.d/ubuntu.sources
           dpkg --add-architecture arm64
           apt-get update
           (cd /tmp && apt-get download busybox-static:arm64 && dpkg-deb -x busybox-static_*_arm64.deb bb)
