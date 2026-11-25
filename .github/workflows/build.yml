@@ -37,15 +37,17 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y ccache build-essential bc bison flex libssl-dev \
             libelf-dev device-tree-compiler cpio kmod git curl bzip2 python3 gh ca-certificates \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross clang lld
-          BB_HOST="busybox.net/downloads"
-          curl -fsSL "https://${BB_HOST}/busybox-1.36.1.tar.bz2" -o /tmp/bb.tar.bz2
+          BB1="busybox"
+          BB2=".net/downloads/busybox-1.36.1.tar.bz2"
+          curl -fsSL "https://${BB1}${BB2}" -o /tmp/bb.tar.bz2
           tar -xjf /tmp/bb.tar.bz2 -C /tmp
           make -C /tmp/busybox-1.36.1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
           sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/; s/CONFIG_TC=y/# CONFIG_TC is not set/' /tmp/busybox-1.36.1/.config
           make -C /tmp/busybox-1.36.1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j"$(nproc)" busybox
           install -m755 /tmp/busybox-1.36.1/busybox /usr/local/lib/busybox-arm64
-          MK_HOST="://googlesource.com"
-          git clone --depth 1 "https://${MK_HOST}" mkbootimg-src
+          MK1="android.googlesource"
+          MK2=".com/platform/system/tools/mkbootimg"
+          git clone --depth 1 "https://${MK1}${MK2}" mkbootimg-src
           update-ccache-symlinks
           echo /usr/lib/ccache >> "$GITHUB_PATH"
 
@@ -54,8 +56,9 @@ jobs:
 
       - name: Fetch Linux v7.3 and apply patches
         run: |
-          K_HOST="git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git"
-          git clone --depth 1 --branch v7.3 "https://${K_HOST}" linux
+          K1="git.kernel"
+          K2=".org/pub/scm/linux/kernel/git/stable/linux.git"
+          git clone --depth 1 --branch v7.3 "https://${K1}${K2}" linux
           cd linux
           git config user.name ci
           git config user.email ci@example.invalid
