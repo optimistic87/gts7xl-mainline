@@ -10,7 +10,7 @@ permissions:
 jobs:
   build:
     # Self-hosted x86_64 server (label gts7xl), cross-compiling for arm64
-    runs-on: [self-hosted, gts7xl]
+    runs-on: ubuntu-latest
     # /cache lives on the server and survives runs: apt packages, kernel source, ccache
     container:
       image: ubuntu:24.04
