@@ -85,8 +85,22 @@ systemctl enable NetworkManager "$DM" bluetooth systemd-timesyncd \
   $([ -e /etc/systemd/system/gts7xl-sensord-setup.service ] && echo gts7xl-sensord-setup)
 systemctl --global enable gts7xl-audio-sleep
 systemctl set-default graphical.target
-sed -i 's/^load-module module-suspend-on-idle/#&/' /etc/pulse/default.pa
-sed -i 's/^#\?AutoEnable=.*/AutoEnable=true/' /etc/bluetooth/main.conf
+mkdir -p /etc/wireplumber/wireplumber.conf.d
+cat > /etc/wireplumber/wireplumber.conf.d/50-disable-suspend.conf <<'EOF'
+monitor.alsa.rules = [
+  {
+    matches = [
+      { node.name = "~alsa_output.*" }
+      { node.name = "~alsa_input.*" }
+    ]
+    actions = {
+      update-props = {
+        session.suspend-timeout-seconds = 0
+      }
+    }
+  }
+]
+EOFsed -i 's/^#\?AutoEnable=.*/AutoEnable=true/' /etc/bluetooth/main.conf
 mkdir -p /etc/udev/rules.d; ln -sf /dev/null /etc/udev/rules.d/90-alsa-restore.rules
 cp -a /etc/skel/.local "/home/$NEW_USER/"
 chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
