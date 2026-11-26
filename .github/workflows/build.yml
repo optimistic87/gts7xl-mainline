@@ -50,6 +50,11 @@ jobs:
           git clone --depth 1 "https://${MK1}${MK2}" mkbootimg-src
           update-ccache-symlinks
           echo /usr/lib/ccache >> "$GITHUB_PATH"
+            DEBIAN_FRONTEND=noninteractive apt-get install -y ccache build-essential bc bison flex libssl-dev \
+            libelf-dev device-tree-compiler cpio kmod git curl bzip2 python3 gh ca-certificates \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross clang lld \
+            libarchive-tools qemu-user-static binfmt-support zip lz4
+
 
       - name: Build the GNSS helpers
         run: make -C gnss install DESTDIR="$PWD/rootfs/overlay"
