@@ -38,7 +38,7 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y ccache build-essential bc bison flex libssl-dev \
             libelf-dev device-tree-compiler cpio kmod git curl bzip2 python3 gh ca-certificates \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross clang lld \
-            libarchive-tools qemu-user-static binfmt-support zip lz4
+            libarchive-tools qemu-user-static binfmt-support zip lz4 file
           BB1="busybox"
           BB2=".net/downloads/busybox-1.36.1.tar.bz2"
           curl -fsSL "https://${BB1}${BB2}" -o /tmp/bb.tar.bz2
@@ -107,8 +107,14 @@ jobs:
             --kernel kernel-dtb --ramdisk rd -o artifact/boot.img
           cp modules.tar.gz artifact/modules-7.3.0-gts7xl.tar.gz
 
-          update-binfmts --enable qemu-aarch64 || true
-          curl -fsSL -L "http://archlinuxarm.org" -o ArchLinuxARM-aarch64-latest.tar.gz
+          mount binfmt_misc -t binfmt_misc /proc/sys/fs/binfmt_misc 2>/dev/null || true
+          if [ ! -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
+            echo ':qemu-aarch64:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/qemu-aarch64-static:F' > /proc/sys/fs/binfmt_misc/register
+          fi
+
+          curl -fSL "https://archlinuxarm.org" -o ArchLinuxARM-aarch64-latest.tar.gz
+          file ArchLinuxARM-aarch64-latest.tar.gz | grep -q "gzip compressed data"
+
           ./rootfs/arch-install.sh ArchLinuxARM-aarch64-latest.tar.gz modules.tar.gz rootfs.tar.gz
           ./rootfs/package.sh artifact/boot.img rootfs.tar.gz artifact/
           (cd artifact && sha256sum boot.img modules-7.3.0-gts7xl.tar.gz gts7xlwifi-arch-twrp.zip gts7xlwifi-boot-odin.tar.md5 > SHA256SUMS)
