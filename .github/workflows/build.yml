@@ -99,7 +99,7 @@ jobs:
           stat -c %s ../stage2.tar.gz > "$INITRAMFS/s1/stage2.size"
           make -s O=build -j"$(nproc)" Image
 
-      - name: Package
+            - name: Package
         run: |
           mkdir -p artifact
           gzip -9c linux/build/arch/arm64/boot/Image > kernel.gz
@@ -109,7 +109,14 @@ jobs:
             --kernel_offset 0x00008000 --ramdisk_offset 0x01000000 --tags_offset 0x00000100 \
             --kernel kernel-dtb --ramdisk rd -o artifact/boot.img
           cp modules.tar.gz artifact/modules-7.3.0-gts7xl.tar.gz
-          (cd artifact && sha256sum boot.img modules-7.3.0-gts7xl.tar.gz > SHA256SUMS)
+
+          # Скачиваем базовый Arch Linux ARM, настраиваем (с вашим PipeWire) и пакуем в TWRP zip
+          update-binfmts --enable qemu-aarch64 || true
+          curl -fsSL -L "http://archlinuxarm.org" -o ArchLinuxARM-aarch64-latest.tar.gz
+          ./rootfs/arch-install.sh ArchLinuxARM-aarch64-latest.tar.gz modules.tar.gz rootfs.tar.gz
+          ./rootfs/package.sh artifact/boot.img rootfs.tar.gz artifact/
+          (cd artifact && sha256sum boot.img modules-7.3.0-gts7xl.tar.gz gts7xlwifi-arch-twrp.zip gts7xlwifi-boot-odin.tar.md5 > SHA256SUMS)
+
 
       - uses: actions/upload-artifact@v4
         with:
